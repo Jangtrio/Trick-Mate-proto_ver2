@@ -483,7 +483,6 @@ function previewOn(r,c,keep=false){
 /* ===== 왕 사망 조건 ===== */
 function beginBattle(){
   setPhase("전투");
-  ...
   if(!hasKing(ai)){ 
     log("승리: 상대 왕이 사망했습니다."); 
     setPhase("종료"); 
@@ -494,7 +493,6 @@ function beginBattle(){
 }
 
 async function enemyCounterAndEnd(){
-  ...
   if(!hasKing(me)){ 
     log("패배: 아군 왕이 사망했습니다."); 
     setPhase("종료"); 
@@ -508,7 +506,6 @@ async function enemyCounterAndEnd(){
   }
   endTurn();
 }
-
   
 /* ===== 결과 ===== */
 function showResultPopup(){
