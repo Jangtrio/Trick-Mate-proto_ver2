@@ -167,6 +167,15 @@ function calcScore(board){
   }
   return {pieces,score};
 }
+
+/* ===== 왕 정의 ===== */
+const KINGS = ["디아나", "에르핀", "벨리타"];
+function hasKing(board){
+  for(let r=0;r<BOARD_SIZE;r++) for(let c=0;c<BOARD_SIZE;c++){
+    if(board[r][c] && KINGS.includes(board[r][c].name)) return true;
+  }
+  return false;
+}
   
 /* ===== 상태 ===== */
 let myFaction=null, aiFaction=null;
@@ -471,6 +480,36 @@ function previewOn(r,c,keep=false){
   if(!keep) log(`미리보기: (${r+1},${c+1}), 패턴[${pattern}]`);
 }
 
+/* ===== 왕 사망 조건 ===== */
+function beginBattle(){
+  setPhase("전투");
+  ...
+  if(!hasKing(ai)){ 
+    log("승리: 상대 왕이 사망했습니다."); 
+    setPhase("종료"); 
+    showResultPopup(); 
+    return; 
+  }
+  enemyCounterAndEnd();
+}
+
+async function enemyCounterAndEnd(){
+  ...
+  if(!hasKing(me)){ 
+    log("패배: 아군 왕이 사망했습니다."); 
+    setPhase("종료"); 
+    showResultPopup(); 
+    return; 
+  }
+  if(countUnits(ai)===0 || countUnits(me)===0){
+    setPhase("종료"); 
+    showResultPopup(); 
+    return;
+  }
+  endTurn();
+}
+
+  
 /* ===== 결과 ===== */
 function showResultPopup(){
   const myRes = calcScore(me);
