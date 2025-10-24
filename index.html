@@ -68,12 +68,20 @@ small{color:var(--muted)}
     <p><small>공격 단계로 전환</small></p>
   </div>
 </div>
+<!-- 결과 팝업 -->
+<div class="overlay" id="resultOverlay" style="display:none">
+  <div class="start" id="resultBox" style="text-align:center;min-width:320px">
+    <h1>게임 종료</h1>
+    <div id="resultContent" style="margin:12px 0;font-size:14px;line-height:1.6"></div>
+    <button class="btn" id="btnRestart">게임 다시 시작</button>
+  </div>
+</div>
 
 <div class="wrap">
   <div class="topbar">
     <button class="btn" id="btnReady">준비 종료</button>
     <div class="pill status"><span id="phase">대기</span> · <span id="timer">00</span>s</div>
-    <div class="pill">턴 <span id="turn">1</span>/<span id="turnTotal">3</span></div>
+    <div class="pill">턴 <span id="turn">1</span>/<span id="turnTotal">10</span></div>
     <div class="pill">내 진영 <span id="myFaction" class="badge">-</span></div>
     <div class="pill">상대 진영 <span id="aiFaction" class="badge">-</span></div>
     <div style="flex:1"></div>
@@ -114,7 +122,7 @@ small{color:var(--muted)}
 
 <script>
 /* ===== 상수 ===== */
-const BOARD_SIZE=5, PREP_TIME=20, ATTACK_TIME=8, MAX_TURN=3, AI_TURN_DELAY=1000;
+const BOARD_SIZE=5, PREP_TIME=20, ATTACK_TIME=8, MAX_TURN=10, AI_TURN_DELAY=1000;
 
 /* ===== 데이터 ===== */
 const FACTIONS={
@@ -132,6 +140,19 @@ const HP_TABLE={
   "벨리타":3,"프리클":2,"마카샤":2,"셰럼":2,"포셔":2,"레비":1,
   "에르핀":3,"네르":2,"죠안":2,"에슈르":2,"마요(멋짐)":2,"마리":1
 };
+/* 점수 규칙: 왕=3, 보좌관=2, 백성=1 */
+const SCORE_TABLE={
+  // 왕
+  "디아나":3,"에르핀":3,"벨리타":3,
+  // 보좌관
+  "티그":2,"네르":2,"프리클":2,"루포":2,"마카샤":2,"죠안":2,"셰럼":2,"에슈르":2,"포셔":2,"마요(멋짐)":2,
+  // 백성
+  "버터":1,"코미":1,"베니":1,"마리":1,"레비":1
+};
+function roleOf(name){
+  const s=SCORE_TABLE[name]||0;
+  return s===3?"왕":(s===2?"보좌관":(s===1?"백성":"미분류"));
+}
 function patternOffsets(k){
   switch(k){
     case "plus1": return [[1,0],[-1,0],[0,1],[0,-1]];
@@ -161,7 +182,7 @@ const elAiOverlay=document.getElementById('aiOverlay');
 const elNextOverlay=document.getElementById('nextOverlay');
 
 for(let i=0;i<BOARD_SIZE*BOARD_SIZE;i++){const d=document.createElement('div'); d.className='cell'; d.dataset.idx=i; elBoardMe.appendChild(d);}
-for(let i=0;i<BOARD_SIZE*BOARD_SIZE;i++){const d=document.createElement('div'); d.className='cell'; d.dataset.idx=i; elBoardAI.appendChild(d);}
+for(let i=0;i<BOARD_SIZE*BOARD_SIZE;i'){const d=document.createElement('div'); d.className='cell'; d.dataset.idx=i; elBoardAI.appendChild(d);}
 
 function fmtTime(n){return String(n).padStart(2,'0')}
 function log(msg){const el=document.getElementById('log'); const t=new Date().toLocaleTimeString(); el.innerHTML=`[${t}] ${msg}<br>`+el.innerHTML;}
@@ -204,17 +225,17 @@ function setPhase(p, seconds=0){
   }
 }
 
-/* ===== 흐릿표시 초기화 ===== */
+/* ===== 마킹 초기화 ===== */
 function clearEnemyMarks(){[...elBoardAI.children].forEach(el=>el.classList.remove('preview','hit','kill'))}
 function clearMyMarks(){[...elBoardMe.children].forEach(el=>el.classList.remove('preview','hit','kill'))}
 
 /* ===== 유닛 ===== */
 function createUnit(name){
   const max=HP_TABLE[name]||1;
-  return {name, hp:max, max, lastUsedTurn:-1}; // 핵심: -1로 초기화
+  return {name, hp:max, max, lastUsedTurn:-1}; // 1턴 오판정 방지
 }
 
-/* ===== 단계 전환 타이머 ===== */
+/* ===== 타이머 종료 ===== */
 function onTimerEnd(){
   if(phase==="준비") finishPrepare();
   else if(phase==="공격") autoAttackIfNone();
@@ -374,19 +395,60 @@ async function enemyCounterAndEnd(){
     log("상대는 이번 턴에 사용할 기물이 없음.");
   }
 
-  if(countUnits(ai)===0){ setPhase("종료"); log("승리: 상대 전멸."); return; }
-  if(countUnits(me)===0){ setPhase("종료"); log("패배: 아군 전멸."); return; }
+  if(countUnits(ai)===0){ setPhase("종료"); log("승리: 상대 전멸."); showResultPopup(true); return; }
+  if(countUnits(me)===0){ setPhase("종료"); log("패배: 아군 전멸."); showResultPopup(true); return; }
 
   endTurn();
 }
 function countUnits(board){let n=0; for(let r=0;r<BOARD_SIZE;r++) for(let c=0;c<BOARD_SIZE;c++) if(board[r][c]) n++; return n;}
 async function endTurn(){
   if(turn>=MAX_TURN){
-    setPhase("종료"); log("3턴 시나리오 종료."); return;
+    setPhase("종료");
+    showResultPopup(false);
+    return;
   }
   turn++; document.getElementById('turn').textContent=turn;
   elNextOverlay.style.display='flex'; await nextFrame(); await delay(600); elNextOverlay.style.display='none';
   startAttack();
+}
+
+/* ===== 결과 계산 및 팝업 ===== */
+function calcScore(board){
+  let pieces=0, score=0;
+  let kings=0, advisors=0, commons=0;
+  for(let r=0;r<BOARD_SIZE;r++) for(let c=0;c<BOARD_SIZE;c++){
+    const u=board[r][c];
+    if(!u) continue;
+    pieces++;
+    const s=SCORE_TABLE[u.name]||0;
+    score += s;
+    if(s===3) kings++; else if(s===2) advisors++; else if(s===1) commons++;
+  }
+  return {pieces,score, kings, advisors, commons};
+}
+function showResultPopup(early){
+  const myRes = calcScore(me);
+  const aiRes = calcScore(ai);
+  let winner = "무승부";
+  if(myRes.score > aiRes.score) winner="플레이어 승";
+  else if(myRes.score < aiRes.score) winner="AI 승";
+
+  const roundInfo = early ? "<p><small>조기 종료</small></p>" : `<p><small>${MAX_TURN}턴 종료</small></p>`;
+
+  const myBreak = `왕 ${myRes.kings}개 ×3점, 보좌관 ${myRes.advisors}개 ×2점, 백성 ${myRes.commons}개 ×1점`;
+  const aiBreak = `왕 ${aiRes.kings}개 ×3점, 보좌관 ${aiRes.advisors}개 ×2점, 백성 ${aiRes.commons}개 ×1점`;
+
+  const html = `
+    ${roundInfo}
+    <p>플레이어 남은 기물: <b>${myRes.pieces}</b>개 · 합계 <b>${myRes.score}</b>점</p>
+    <p style="margin-top:-6px;color:${'var(--muted)'}">${myBreak}</p>
+    <p>상대 남은 기물: <b>${aiRes.pieces}</b>개 · 합계 <b>${aiRes.score}</b>점</p>
+    <p style="margin-top:-6px;color:${'var(--muted)'}">${aiBreak}</p>
+    <hr style="border:none;border-top:1px solid var(--line);margin:10px 0;">
+    <p><b>결과: ${winner}</b></p>
+  `;
+  document.getElementById('resultContent').innerHTML = html;
+  document.getElementById('resultOverlay').style.display='flex';
 }
 
 /* ===== 상호작용 ===== */
@@ -450,7 +512,8 @@ document.getElementById('btnStart').onclick=()=>{
 };
 document.getElementById('btnReady').onclick=()=>{ if(phase==="준비") finishPrepare(); };
 document.getElementById('btnReset').onclick=()=>{ location.reload(); };
-document.getElementById('btnSurrender').onclick=()=>{ setPhase("종료"); log("항복. 패배 처리."); };
+document.getElementById('btnSurrender').onclick=()=>{ setPhase("종료"); log("항복. 패배 처리."); showResultPopup(true); };
+document.getElementById('btnRestart').onclick=()=>{ location.reload(); };
 
 /* ===== 초기 렌더 ===== */
 renderBoards(); renderReserve();
