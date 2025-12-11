@@ -106,6 +106,7 @@ body{
 .board{
   display:grid;
   grid-template-columns:repeat(5,1fr);
+  grid-auto-rows:1fr;           /* 모든 셀 정사각형 비율 유지 */
   aspect-ratio:1;
   background:#e6ffd4;
   border-radius:22px;
@@ -127,6 +128,9 @@ body{
   text-align:center;
   background:rgba(255,255,255,.55);
   border-radius:6px;
+  min-width:0;
+  min-height:0;
+  overflow:hidden;              /* 내부 내용이 커도 보드가 늘어나지 않도록 */
 }
 .cell:hover{
   outline:2px solid rgba(34,197,94,.28);
@@ -140,11 +144,26 @@ body{
   border-radius:6px;
   background:rgba(56,189,248,.22);
 }
+/* 적중 / 파괴 칸: 더 진한 붉은색 + 영구 표시용 */
 .cell.hit{
-  background:rgba(248,113,113,.25);
+  background:rgba(248,113,113,.6);
 }
 .cell.kill{
-  background:rgba(248,113,113,.35);
+  background:rgba(185,28,28,.78);
+}
+
+/* AI 기물 파괴 후 X 표시 */
+.kill-x{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:900;
+  color:#fef2f2;
+  font-size:22px;
+  text-shadow:0 0 4px rgba(0,0,0,.5);
+  pointer-events:none;
 }
 
 /* 중앙 패널 영역 */
@@ -266,8 +285,8 @@ small{color:var(--muted)}
   line-height:1;
 }
 .unit-img{
-  width:88%;
-  max-height:54px;
+  max-width:80%;
+  max-height:60%;
   object-fit:contain;
   pointer-events:none;
   image-rendering:auto;
@@ -288,6 +307,23 @@ small{color:var(--muted)}
 .hpseg.on{
   background:var(--ok);
   border-color:#22c55e;
+}
+
+/* 공격 이펙트 이미지 */
+.hit-effect{
+  position:absolute;
+  inset:0;
+  margin:auto;
+  width:90%;
+  height:90%;
+  object-fit:contain;
+  pointer-events:none;
+  animation:hit-burst .45s ease-out forwards;
+}
+@keyframes hit-burst{
+  0%{opacity:0;transform:scale(.4);}
+  25%{opacity:1;transform:scale(1);}
+  100%{opacity:0;transform:scale(1.3);}
 }
 </style>
 </head>
@@ -410,6 +446,31 @@ function getUnitImage(name){
   return UNIT_IMAGES[name] || "img/default.png";
 }
 
+/* ===== 공격 이펙트 이미지 매핑 ===== */
+const EFFECT_IMAGES = {
+  "디아나":"img/diana_attack.png",
+  "티그":"img/tig_attack.png",
+  "루포":"img/rupo_attack.png",
+  "버터":"img/butter_attack.png",
+  "코미":"img/komi_attack.png",
+  "베니":"img/benny_attack.png",
+  "에르핀":"img/erfin_attack.png",
+  "네르":"img/ner_attack.png",
+  "죠안":"img/joan_attack.png",
+  "에슈르":"img/eshur_attack.png",
+  "마요(멋짐)":"img/mayo_cool_attack.png",
+  "마리":"img/marie_attack.png",
+  "벨리타":"img/velita_attack.png",
+  "프리클":"img/prickle_attack.png",
+  "셰럼":"img/sherm_attack.png",
+  "마카샤":"img/makasha_attack.png",
+  "포셔":"img/posher_attack.png",
+  "레비":"img/levi_attack.png"
+};
+function getEffectImage(name){
+  return EFFECT_IMAGES[name] || "img/default_attack.png";
+}
+
 /* ===== 점수 규칙 ===== */
 const SCORE_TABLE = {
   "디아나":3, "에르핀":3, "벨리타":3,
@@ -446,6 +507,9 @@ const me=Array.from({length:BOARD_SIZE},()=>Array(BOARD_SIZE).fill(null));
 const ai=Array.from({length:BOARD_SIZE},()=>Array(BOARD_SIZE).fill(null));
 let reserve=[], selectedReserve=null, pickUp=null;
 let attackChoice=null, lastPreview=null, aiUnits=[], hasAttacked=false;
+
+/* 플레이어가 때린 적 보드의 영구 상태: none / hit / kill */
+const aiCellState = Array.from({length:BOARD_SIZE},()=>Array(BOARD_SIZE).fill("none"));
 
 /* ===== 유틸 ===== */
 const elBoardMe=document.getElementById('boardMe');
@@ -485,18 +549,27 @@ function renderBoards(){
     el.classList.remove('preview');
     renderCell(el, v, true, v ? (turn>1 && v.lastUsedTurn===turn-1) : false);
   }
+
+  const cellsAI=elBoardAI.children;
   for(let i=0;i<BOARD_SIZE*BOARD_SIZE;i++){
-    const el=elBoardAI.children[i];
-    el.textContent="";
+    const r=Math.floor(i/BOARD_SIZE), c=i%BOARD_SIZE;
+    const el=cellsAI[i];
+    el.classList.remove('preview','hit','kill');
+    el.innerHTML="";
     el.title="";
-    el.classList.remove('preview');
+    const state = aiCellState[r][c];
+    if(state==="hit") el.classList.add('hit');
+    if(state==="kill"){
+      el.classList.add('kill');
+      el.innerHTML = '<span class="kill-x">X</span>';
+    }
   }
   if(lastPreview){ previewOn(lastPreview.r,lastPreview.c,true); }
 }
 
 function renderCell(el, unit, showHp, cd){
   if(!unit){
-    if(!el.classList.contains('kill')){
+    if(!el.classList.contains('kill')){ // kill 칸은 X 표시 유지
       el.innerHTML="";
       el.title="";
     }
@@ -540,8 +613,14 @@ function setPhase(p, seconds=0){
 }
 
 /* ===== 흐릿표시 초기화 ===== */
-function clearEnemyMarks(){[...elBoardAI.children].forEach(el=>el.classList.remove('preview','hit','kill'))}
-function clearMyMarks(){[...elBoardMe.children].forEach(el=>el.classList.remove('preview','hit','kill'))}
+function clearEnemyMarks(){
+  // 이제 preview만 제거, hit/kill은 영구 표시
+  [...elBoardAI.children].forEach(el=>el.classList.remove('preview'));
+}
+function clearMyMarks(){
+  // 우리 보드의 hit/kill은 매 턴 리셋
+  [...elBoardMe.children].forEach(el=>el.classList.remove('preview','hit','kill'));
+}
 
 /* ===== 유닛 ===== */
 function createUnit(name){
@@ -576,6 +655,11 @@ function startPrepare(){
   pickUp=null;
   attackChoice=null;
   lastPreview=null;
+  // ai 보드 상태/히트 표시 초기화
+  for(let r=0;r<BOARD_SIZE;r++) for(let c=0;c<BOARD_SIZE;c++){
+    ai[r][c]=null;
+    aiCellState[r][c]="none";
+  }
   aiRandomFill();
   renderReserve();
   renderBoards();
@@ -615,7 +699,7 @@ function finishPrepare(){
   startAttack();
 }
 function aiRandomFill(){
-  for(let r=0;r<BOARD_SIZE;r++) for(let c=0;c<BOARD_SIZE;c++) ai[r][c]=null;
+  for(let r=0;r<BOARD_SIZE;r++) for(let c=0;c<BOARD_SIZE;c++) if(!ai[r][c]) ai[r][c]=null;
   const pool=[...FACTIONS[aiFaction]];
   while(pool.length){
     const name=pool.shift();
@@ -680,15 +764,34 @@ function patternOffsets(k){
     default: return [[0,0]];
   }
 }
+
+/* 플레이어 공격 이펙트 출력 */
+function spawnHitEffect(el, attackerName){
+  const src = getEffectImage(attackerName);
+  const img = document.createElement('img');
+  img.src = src;
+  img.alt = attackerName + " 공격";
+  img.className = 'hit-effect';
+  el.appendChild(img);
+  setTimeout(()=>{ img.remove(); }, 500);
+}
+
 function applyAttack(boardEl, boardData, attackerName, target){
   const pattern=PATTERNS[attackerName]||"plus1";
   const ofs=patternOffsets(pattern);
+  const isPlayerAttackOnAI = (boardEl===elBoardAI && boardData===ai);
   let hits=0,kills=0;
+
   ofs.forEach(([dr,dc])=>{
     const rr=target.r+dr, cc=target.c+dc;
     if(rr<0||cc<0||rr>=BOARD_SIZE||cc>=BOARD_SIZE) return;
     const idx=rr*BOARD_SIZE+cc, el=boardEl.children[idx];
+
+    const hadUnit = !!boardData[rr][cc];
+
+    // 시각적 hit 클래스는 두 보드 모두 사용
     el.classList.add('hit');
+
     if(boardData[rr][cc]){
       boardData[rr][cc].hp -= 1;
       if(boardData[rr][cc].hp<=0){
@@ -699,13 +802,29 @@ function applyAttack(boardEl, boardData, attackerName, target){
           el.innerHTML="";
           el.title="";
         }
+        if(isPlayerAttackOnAI && hadUnit){
+          aiCellState[rr][cc]="kill"; // 영구 kill 표시
+          spawnHitEffect(el, attackerName);
+          // X 표시와 강한 붉은색은 renderBoards에서 재적용
+        }
       }else{
-        if(boardEl===elBoardMe)
+        if(boardEl===elBoardMe){
           renderCell(el, boardData[rr][cc], true, (turn>1 && boardData[rr][cc].lastUsedTurn===turn-1));
+        }
+        if(isPlayerAttackOnAI && hadUnit){
+          // 아직 살아있지만 적중
+          aiCellState[rr][cc]="hit";
+          spawnHitEffect(el, attackerName);
+        }
       }
     }
     hits++;
   });
+
+  // AI 보드의 영구 표시를 위해 재렌더
+  if(isPlayerAttackOnAI){
+    renderBoards();
+  }
   return {pattern,hits,kills};
 }
 function beginBattle(){
@@ -895,3 +1014,4 @@ renderReserve();
 </script>
 </body>
 </html>
+
