@@ -37,8 +37,16 @@ body{margin:0;background:var(--bg);color:var(--text)}
 small{color:var(--muted)}
 .spinner{width:36px;height:36px;border:3px solid rgba(124,209,255,.2);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 8px}
 @keyframes spin{to{transform:rotate(360deg)}}
+
 /* 유닛 렌더 */
-.unit{display:flex;flex-direction:column;align-items:center;gap:2px;line-height:1}
+.unit{display:flex;flex-direction:column;align-items:center;gap:4px;line-height:1}
+.unit-img{
+  width:90%;
+  max-height:56px;
+  object-fit:contain;
+  image-rendering:auto;
+  pointer-events:none;
+}
 .unit-name{font-size:11px}
 .unit-name.cd{color:var(--muted)} /* 직전 턴 사용으로 이번 턴 사용 불가 */
 .hpbar{display:flex;gap:2px}
@@ -139,17 +147,34 @@ const HP_TABLE={
   "벨리타":3,"프리클":2,"마카샤":2,"셰럼":2,"포셔":2,"레비":1,
   "에르핀":3,"네르":2,"죠안":2,"에슈르":2,"마요(멋짐)":2,"마리":1
 };
-function patternOffsets(k){
-  switch(k){
-    case "plus1": return [[1,0],[-1,0],[0,1],[0,-1]];
-    case "diag1": return [[1,1],[1,-1],[-1,1],[-1,-1]];
-    case "cross2": return [[1,0],[-1,0],[0,1],[0,-1],[2,0],[-2,0],[0,2],[0,-2]];
-    case "square1": return [[0,0],[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
-    case "line2": return [[1,0],[2,0],[-1,0],[-2,0],[0,1],[0,2],[0,-1],[0,-2]];
-    default: return [[0,0]];
-  }
+
+/* ===== 유닛 이미지 경로 매핑 =====
+   실제 PNG 파일 경로에 맞게 수정해서 사용하세요.
+   예: /img/diana.png 를 배포 리포지토리에 올려두기 */
+const UNIT_IMAGES = {
+  "디아나":"img/diana.png",
+  "티그":"img/tig.png",
+  "루포":"img/rupo.png",
+  "버터":"img/butter.png",
+  "코미":"img/komi.png",
+  "베니":"img/benny.png",
+  "에르핀":"img/erfin.png",
+  "네르":"img/ner.png",
+  "죠안":"img/joan.png",
+  "에슈르":"img/eshur.png",
+  "마요(멋짐)":"img/mayo_cool.png",
+  "마리":"img/marie.png",
+  "벨리타":"img/velita.png",
+  "프리클":"img/prickle.png",
+  "셰럼":"img/sherm.png",
+  "마카샤":"img/makasha.png",
+  "포셔":"img/posher.png",
+  "레비":"img/levi.png"
+};
+function getUnitImage(name){
+  return UNIT_IMAGES[name] || "img/default.png";
 }
-  
+
 /* ===== 점수 규칙 ===== */
 const SCORE_TABLE = {
   "디아나":3, "에르핀":3, "벨리타":3,      // 왕
@@ -176,7 +201,7 @@ function hasKing(board){
   }
   return false;
 }
-  
+
 /* ===== 상태 ===== */
 let myFaction=null, aiFaction=null;
 let turn=1, phase="대기";
@@ -194,11 +219,25 @@ const elReserve=document.getElementById('reserve');
 const elAiOverlay=document.getElementById('aiOverlay');
 const elNextOverlay=document.getElementById('nextOverlay');
 
-for(let i=0;i<BOARD_SIZE*BOARD_SIZE;i++){const d=document.createElement('div'); d.className='cell'; d.dataset.idx=i; elBoardMe.appendChild(d);}
-for(let i=0;i<BOARD_SIZE*BOARD_SIZE;i++){const d=document.createElement('div'); d.className='cell'; d.dataset.idx=i; elBoardAI.appendChild(d);}
+for(let i=0;i<BOARD_SIZE*BOARD_SIZE;i++){
+  const d=document.createElement('div');
+  d.className='cell';
+  d.dataset.idx=i;
+  elBoardMe.appendChild(d);
+}
+for(let i=0;i<BOARD_SIZE*BOARD_SIZE;i++){
+  const d=document.createElement('div');
+  d.className='cell';
+  d.dataset.idx=i;
+  elBoardAI.appendChild(d);
+}
 
 function fmtTime(n){return String(n).padStart(2,'0')}
-function log(msg){const el=document.getElementById('log'); const t=new Date().toLocaleTimeString(); el.innerHTML=`[${t}] ${msg}<br>`+el.innerHTML;}
+function log(msg){
+  const el=document.getElementById('log');
+  const t=new Date().toLocaleTimeString();
+  el.innerHTML=`[${t}] ${msg}<br>`+el.innerHTML;
+}
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
 const nextFrame=()=>new Promise(r=>requestAnimationFrame(()=>r()));
 
@@ -213,27 +252,56 @@ function renderBoards(){
   }
   for(let i=0;i<BOARD_SIZE*BOARD_SIZE;i++){
     const el=elBoardAI.children[i];
-    el.textContent=""; el.title="";
+    el.textContent="";
+    el.title="";
     el.classList.remove('preview');
   }
   if(lastPreview){ previewOn(lastPreview.r,lastPreview.c,true); }
 }
+
+/* 핵심 변경: 플레이어 보드에는 이미지 + HP바, 적 보드는 기존처럼 텍스트만(또는 비공개) */
 function renderCell(el, unit, showHp, cd){
-  if(!unit){ if(!el.classList.contains('kill')){ el.innerHTML=""; el.title=""; } return; }
+  if(!unit){
+    if(!el.classList.contains('kill')){
+      el.innerHTML="";
+      el.title="";
+    }
+    return;
+  }
   const {name,hp,max}=unit;
-  el.innerHTML= showHp ? `
-    <div class="unit">
-      <div class="unit-name ${cd?'cd':''}">${name}</div>
-      <div class="hpbar">${Array.from({length:max},(_,i)=>`<div class="hpseg ${i<hp?'on':''}"></div>`).join('')}</div>
-    </div>` : name;
+
+  if(showHp){
+    // 플레이어 보드: 캐릭터 이미지 + HP바
+    const imgSrc = getUnitImage(name);
+    el.innerHTML = `
+      <div class="unit">
+        <img class="unit-img" src="${imgSrc}" alt="${name}">
+        <div class="hpbar">
+          ${Array.from({length:max},(_,i)=>`<div class="hpseg ${i<hp?'on':''}"></div>`).join('')}
+        </div>
+      </div>
+    `;
+  }else{
+    // 적 보드 혹은 텍스트만 필요할 때
+    el.innerHTML = name;
+  }
   el.title = `${name} HP ${hp}/${max}`;
 }
+
 function setPhase(p, seconds=0){
-  phase=p; document.getElementById('phase').textContent=p;
-  clearInterval(timerId); timeLeft=seconds; document.getElementById('timer').textContent=fmtTime(timeLeft);
+  phase=p;
+  document.getElementById('phase').textContent=p;
+  clearInterval(timerId);
+  timeLeft=seconds;
+  document.getElementById('timer').textContent=fmtTime(timeLeft);
   if(seconds>0){
-    timerId=setInterval(()=>{ timeLeft--; document.getElementById('timer').textContent=fmtTime(timeLeft);
-      if(timeLeft<=0){ clearInterval(timerId); onTimerEnd(); }
+    timerId=setInterval(()=>{
+      timeLeft--;
+      document.getElementById('timer').textContent=fmtTime(timeLeft);
+      if(timeLeft<=0){
+        clearInterval(timerId);
+        onTimerEnd();
+      }
     },1000);
   }
 }
@@ -273,7 +341,8 @@ function startPrepare(){
   reserve=[...FACTIONS[myFaction]].sort((a,b)=>a.localeCompare(b));
   selectedReserve=null; pickUp=null; attackChoice=null; lastPreview=null;
   aiRandomFill();
-  renderReserve(); renderBoards();
+  renderReserve();
+  renderBoards();
   setPhase("준비", PREP_TIME);
   log("준비 단계 시작. 배치 후 [준비 종료].");
 }
@@ -282,9 +351,15 @@ function renderReserve(){
   reserve.forEach((name,idx)=>{
     const d=document.createElement('div');
     d.className='chip'+(selectedReserve===idx?' sel':'');
+
     d.textContent=name;
     d.title=`패턴:${PATTERNS[name]} · HP ${HP_TABLE[name]}`;
-    d.onclick=()=>{ selectedReserve = (selectedReserve===idx? null: idx); pickUp=null; renderReserve(); };
+
+    d.onclick=()=>{
+      selectedReserve = (selectedReserve===idx? null: idx);
+      pickUp=null;
+      renderReserve();
+    };
     elReserve.appendChild(d);
   });
   document.getElementById('reserveInfo').textContent=`(남은 ${reserve.length}/8)`;
@@ -292,12 +367,14 @@ function renderReserve(){
 function finishPrepare(){
   while(reserve.length){
     const name=reserve.shift();
-    const empty=[]; for(let r=0;r<BOARD_SIZE;r++) for(let c=0;c<BOARD_SIZE;c++) if(!me[r][c]) empty.push({r,c});
+    const empty=[];
+    for(let r=0;r<BOARD_SIZE;r++) for(let c=0;c<BOARD_SIZE;c++) if(!me[r][c]) empty.push({r,c});
     if(!empty.length) break;
     const {r,c}=empty[Math.floor(Math.random()*empty.length)];
     me[r][c]=createUnit(name);
   }
-  renderReserve(); renderBoards();
+  renderReserve();
+  renderBoards();
   log("준비 단계 종료.");
   startAttack();
 }
@@ -306,7 +383,8 @@ function aiRandomFill(){
   const pool=[...FACTIONS[aiFaction]];
   while(pool.length){
     const name=pool.shift();
-    const empty=[]; for(let r=0;r<BOARD_SIZE;r++) for(let c=0;c<BOARD_SIZE;c++) if(!ai[r][c]) empty.push({r,c});
+    const empty=[];
+    for(let r=0;r<BOARD_SIZE;r++) for(let c=0;c<BOARD_SIZE;c++) if(!ai[r][c]) empty.push({r,c});
     if(!empty.length) break;
     const {r,c}=empty[Math.floor(Math.random()*empty.length)];
     ai[r][c]=createUnit(name);
@@ -324,7 +402,8 @@ function collectAiUnits(){
 function startAttack(){
   hasAttacked=false;
   setPhase("공격", ATTACK_TIME);
-  attackChoice=null; lastPreview=null; clearEnemyMarks(); clearMyMarks();
+  attackChoice=null; lastPreview=null;
+  clearEnemyMarks(); clearMyMarks();
   renderBoards();
   log(`공격 단계 시작. 턴 ${turn}. 한 턴에 한 기물만 공격.`);
 }
@@ -339,7 +418,11 @@ function selectableMyUnits(){
 function autoAttackIfNone(){
   if(attackChoice){ beginBattle(); return; }
   const list=selectableMyUnits();
-  if(!list.length){ log("사용 가능한 기물이 없어 공격을 건너뜁니다."); beginBattle(); return; }
+  if(!list.length){
+    log("사용 가능한 기물이 없어 공격을 건너뜁니다.");
+    beginBattle();
+    return;
+  }
   hasAttacked=true;
   const unit=list[Math.floor(Math.random()*list.length)];
   const target={r:Math.floor(Math.random()*BOARD_SIZE), c:Math.floor(Math.random()*BOARD_SIZE)};
@@ -361,10 +444,16 @@ function applyAttack(boardEl, boardData, attackerName, target){
     if(boardData[rr][cc]){
       boardData[rr][cc].hp -= 1;
       if(boardData[rr][cc].hp<=0){
-        boardData[rr][cc]=null; kills++; el.classList.add('kill');
-        if(boardEl===elBoardMe){ el.innerHTML=""; el.title=""; }
+        boardData[rr][cc]=null;
+        kills++;
+        el.classList.add('kill');
+        if(boardEl===elBoardMe){
+          el.innerHTML="";
+          el.title="";
+        }
       }else{
-        if(boardEl===elBoardMe) renderCell(el, boardData[rr][cc], true, (turn>1 && boardData[rr][cc].lastUsedTurn===turn-1));
+        if(boardEl===elBoardMe)
+          renderCell(el, boardData[rr][cc], true, (turn>1 && boardData[rr][cc].lastUsedTurn===turn-1));
       }
     }
     hits++;
@@ -403,7 +492,8 @@ async function enemyCounterAndEnd(){
   if(able.length>0){
     setPhase("상대턴");
     elAiOverlay.style.display='flex';
-    await nextFrame(); await delay(AI_TURN_DELAY);
+    await nextFrame();
+    await delay(AI_TURN_DELAY);
     clearMyMarks();
     const aiUnit=able[Math.floor(Math.random()*able.length)];
     const targetMe={r:Math.floor(Math.random()*BOARD_SIZE), c:Math.floor(Math.random()*BOARD_SIZE)};
@@ -429,7 +519,11 @@ async function enemyCounterAndEnd(){
   }
   endTurn();
 }
-function countUnits(board){let n=0; for(let r=0;r<BOARD_SIZE;r++) for(let c=0;c<BOARD_SIZE;c++) if(board[r][c]) n++; return n;}
+function countUnits(board){
+  let n=0;
+  for(let r=0;r<BOARD_SIZE;r++) for(let c=0;c<BOARD_SIZE;c++) if(board[r][c]) n++;
+  return n;
+}
 async function endTurn(){
   if(turn >= MAX_TURN){
     setPhase("종료");
@@ -439,31 +533,45 @@ async function endTurn(){
   turn++;
   document.getElementById('turn').textContent=turn;
   elNextOverlay.style.display='flex';
-  await nextFrame(); await delay(600);
+  await nextFrame();
+  await delay(600);
   elNextOverlay.style.display='none';
   startAttack();
 }
 
 /* ===== 상호작용 ===== */
 elBoardMe.addEventListener('click', (e)=>{
-  const cell=e.target.closest('.cell'); if(!cell) return;
-  const idx=+cell.dataset.idx; const r=Math.floor(idx/BOARD_SIZE), c=idx%BOARD_SIZE;
+  const cell=e.target.closest('.cell');
+  if(!cell) return;
+  const idx=+cell.dataset.idx;
+  const r=Math.floor(idx/BOARD_SIZE), c=idx%BOARD_SIZE;
 
   if(phase==="준비"){
     if(selectedReserve!=null && !me[r][c]){
       const name=reserve.splice(selectedReserve,1)[0];
-      selectedReserve=null; me[r][c]=createUnit(name); renderReserve(); renderBoards();
+      selectedReserve=null;
+      me[r][c]=createUnit(name);
+      renderReserve();
+      renderBoards();
     }else if(me[r][c] && !pickUp){
       pickUp={r,c};
     }else if(pickUp){
-      if(!me[r][c]){ me[r][c]=me[pickUp.r][pickUp.c]; me[pickUp.r][pickUp.c]=null; }
-      pickUp=null; renderBoards();
+      if(!me[r][c]){
+        me[r][c]=me[pickUp.r][pickUp.c];
+        me[pickUp.r][pickUp.c]=null;
+      }
+      pickUp=null;
+      renderBoards();
     }
   }else if(phase==="공격"){
     if(hasAttacked) return;
     if(attackChoice && attackChoice.unitAt) return;
-    const u=me[r][c]; if(!u) return;
-    if(turn>1 && u.lastUsedTurn===turn-1){ log("직전 턴에 사용한 기물은 이번 턴에 사용할 수 없습니다."); return; }
+    const u=me[r][c];
+    if(!u) return;
+    if(turn>1 && u.lastUsedTurn===turn-1){
+      log("직전 턴에 사용한 기물은 이번 턴에 사용할 수 없습니다.");
+      return;
+    }
     attackChoice={unitAt:{r,c,name:u.name}, target:null};
     log(`선택: ${u.name} (내 보드 ${r+1},${c+1})`);
   }
@@ -471,12 +579,15 @@ elBoardMe.addEventListener('click', (e)=>{
 
 elBoardAI.addEventListener('click', (e)=>{
   if(phase!=="공격" || hasAttacked || !attackChoice || !attackChoice.unitAt) return;
-  const cell=e.target.closest('.cell'); if(!cell) return;
-  const idx=+cell.dataset.idx; const r=Math.floor(idx/BOARD_SIZE), c=idx%BOARD_SIZE;
+  const cell=e.target.closest('.cell');
+  if(!cell) return;
+  const idx=+cell.dataset.idx;
+  const r=Math.floor(idx/BOARD_SIZE), c=idx%BOARD_SIZE;
 
   if(lastPreview && lastPreview.r===r && lastPreview.c===c){
     hasAttacked=true;
-    attackChoice.target={r,c}; log(`공격 확정: (${r+1},${c+1})`);
+    attackChoice.target={r,c};
+    log(`공격 확정: (${r+1},${c+1})`);
     beginBattle();
     return;
   }
@@ -484,7 +595,8 @@ elBoardAI.addEventListener('click', (e)=>{
 });
 
 function previewOn(r,c,keep=false){
-  clearEnemyMarks(); lastPreview={r,c};
+  clearEnemyMarks();
+  lastPreview={r,c};
   const name = me[attackChoice.unitAt.r][attackChoice.unitAt.c].name;
   const pattern = PATTERNS[name]||"plus1";
   const ofs = patternOffsets(pattern);
@@ -495,7 +607,19 @@ function previewOn(r,c,keep=false){
   });
   if(!keep) log(`미리보기: (${r+1},${c+1}), 패턴[${pattern}]`);
 }
-  
+
+/* ===== 패턴 ===== */
+function patternOffsets(k){
+  switch(k){
+    case "plus1": return [[1,0],[-1,0],[0,1],[0,-1]];
+    case "diag1": return [[1,1],[1,-1],[-1,1],[-1,-1]];
+    case "cross2": return [[1,0],[-1,0],[0,1],[0,-1],[2,0],[-2,0],[0,2],[0,-2]];
+    case "square1": return [[0,0],[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+    case "line2": return [[1,0],[2,0],[-1,0],[-2,0],[0,1],[0,2],[0,-1],[0,-2]];
+    default: return [[0,0]];
+  }
+}
+
 /* ===== 결과 ===== */
 function showResultPopup(){
   const myRes = calcScore(me);
@@ -503,7 +627,7 @@ function showResultPopup(){
   let winner = "무승부";
   if(myRes.score > aiRes.score) winner="플레이어 승";
   else if(myRes.score < aiRes.score) winner="AI 승";
-  
+
   const html = `
     <p>플레이어 남은 기물: <b>${myRes.pieces}</b>개 (${myRes.score}점)</p>
     <p>상대 남은 기물: <b>${aiRes.pieces}</b>개 (${aiRes.score}점)</p>
@@ -514,7 +638,7 @@ function showResultPopup(){
   document.getElementById('resultOverlay').style.display='flex';
 }
 document.getElementById('btnRestart').onclick=()=>{ location.reload(); };
-  
+
 /* ===== 버튼 ===== */
 document.getElementById('btnStart').onclick=()=>{
   document.getElementById('overlay').style.display='none';
@@ -524,10 +648,14 @@ document.getElementById('btnStart').onclick=()=>{
 };
 document.getElementById('btnReady').onclick=()=>{ if(phase==="준비") finishPrepare(); };
 document.getElementById('btnReset').onclick=()=>{ location.reload(); };
-document.getElementById('btnSurrender').onclick=()=>{ setPhase("종료"); log("항복. 패배 처리."); };
+document.getElementById('btnSurrender').onclick=()=>{
+  setPhase("종료");
+  log("항복. 패배 처리.");
+};
 
 /* ===== 초기 렌더 ===== */
-renderBoards(); renderReserve();
+renderBoards();
+renderReserve();
 </script>
 </body>
 </html>
