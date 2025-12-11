@@ -274,7 +274,7 @@ small{color:var(--muted)}
   animation:spin 1s linear infinite;
   margin:0 auto 10px;
 }
-@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes spin{to{transform:rotate(360deg)}
 
 /* 유닛 렌더 */
 .unit{
@@ -309,21 +309,14 @@ small{color:var(--muted)}
   border-color:#22c55e;
 }
 
-/* 공격 이펙트 이미지 */
-.hit-effect{
+/* 공격 이펙트: 진영 PNG를 셀 전체에 덮는 용도 (상대 턴 처리 동안 유지) */
+.effect-overlay{
   position:absolute;
   inset:0;
-  margin:auto;
-  width:90%;
-  height:90%;
+  width:100%;
+  height:100%;
   object-fit:contain;
   pointer-events:none;
-  animation:hit-burst .45s ease-out forwards;
-}
-@keyframes hit-burst{
-  0%{opacity:0;transform:scale(.4);}
-  25%{opacity:1;transform:scale(1);}
-  100%{opacity:0;transform:scale(1.3);}
 }
 </style>
 </head>
@@ -446,29 +439,16 @@ function getUnitImage(name){
   return UNIT_IMAGES[name] || "img/default.png";
 }
 
-/* ===== 공격 이펙트 이미지 매핑 ===== */
-const EFFECT_IMAGES = {
-  "디아나":"img/수인.png",
-  "티그":"img/수인.png",
-  "루포":"img/수인.png",
-  "버터":"img/수인.png",
-  "코미":"img/수인.png",
-  "베니":"img/수인.png",
-  "에르핀":"img/요정.png",
-  "네르":"img/요정.png",
-  "죠안":"img/요정.png",
-  "에슈르":"img/요정.png",
-  "마요(멋짐)":"img/요정.png",
-  "마리":"img/요정.png",
-  "벨리타":"img/마녀.png",
-  "프리클":"img/마녀.png",
-  "셰럼":"img/마녀.png",
-  "마카샤":"img/마녀.png",
-  "포셔":"img/마녀.png",
-  "레비":"img/마녀.png"
-};
-function getEffectImage(name){
-  return EFFECT_IMAGES[name] || "img/default_attack.png";
+/* ===== 진영별 공격 이펙트 이미지 ===== */
+/* 수인 → 수인.png, 요정 → 요정.png, 마녀 → 마녀.png */
+function getFactionEffectImage(unitName){
+  if(["디아나","티그","루포","버터","코미","베니"].includes(unitName))
+    return "img/수인.png";
+  if(["에르핀","네르","죠안","에슈르","마요(멋짐)","마리"].includes(unitName))
+    return "img/요정.png";
+  if(["벨리타","프리클","셰럼","마카샤","포셔","레비"].includes(unitName))
+    return "img/마녀.png";
+  return null;
 }
 
 /* ===== 점수 규칙 ===== */
@@ -510,6 +490,8 @@ let attackChoice=null, lastPreview=null, aiUnits=[], hasAttacked=false;
 
 /* 플레이어가 때린 적 보드의 영구 상태: none / hit / kill */
 const aiCellState = Array.from({length:BOARD_SIZE},()=>Array(BOARD_SIZE).fill("none"));
+/* 현재 턴 동안 보여줄 공격 이펙트(진영 PNG) */
+const aiEffectState = Array.from({length:BOARD_SIZE},()=>Array(BOARD_SIZE).fill(null));
 
 /* ===== 유틸 ===== */
 const elBoardMe=document.getElementById('boardMe');
@@ -555,13 +537,22 @@ function renderBoards(){
     const r=Math.floor(i/BOARD_SIZE), c=i%BOARD_SIZE;
     const el=cellsAI[i];
     el.classList.remove('preview','hit','kill');
-    el.innerHTML="";
-    el.title="";
+    let content = "";
     const state = aiCellState[r][c];
     if(state==="hit") el.classList.add('hit');
     if(state==="kill"){
       el.classList.add('kill');
-      el.innerHTML = '<span class="kill-x">X</span>';
+      content = '<span class="kill-x">X</span>';
+    }
+    el.innerHTML = content;
+    el.title="";
+    // 현재 턴 공격 이펙트가 있다면 PNG를 덮어 씌움
+    if(aiEffectState[r][c]){
+      const img = document.createElement('img');
+      img.src = aiEffectState[r][c];
+      img.alt = "공격 이펙트";
+      img.className = "effect-overlay";
+      el.appendChild(img);
     }
   }
   if(lastPreview){ previewOn(lastPreview.r,lastPreview.c,true); }
@@ -614,12 +605,20 @@ function setPhase(p, seconds=0){
 
 /* ===== 흐릿표시 초기화 ===== */
 function clearEnemyMarks(){
-  // 이제 preview만 제거, hit/kill은 영구 표시
+  // 이제 preview만 제거, hit/kill과 이펙트는 유지
   [...elBoardAI.children].forEach(el=>el.classList.remove('preview'));
 }
 function clearMyMarks(){
   // 우리 보드의 hit/kill은 매 턴 리셋
   [...elBoardMe.children].forEach(el=>el.classList.remove('preview','hit','kill'));
+}
+
+/* 현재 턴 공격 이펙트 제거 */
+function clearAiEffects(){
+  for(let r=0;r<BOARD_SIZE;r++)
+    for(let c=0;c<BOARD_SIZE;c++)
+      aiEffectState[r][c]=null;
+  renderBoards();
 }
 
 /* ===== 유닛 ===== */
@@ -655,10 +654,11 @@ function startPrepare(){
   pickUp=null;
   attackChoice=null;
   lastPreview=null;
-  // ai 보드 상태/히트 표시 초기화
+  // ai 보드 상태 초기화
   for(let r=0;r<BOARD_SIZE;r++) for(let c=0;c<BOARD_SIZE;c++){
     ai[r][c]=null;
     aiCellState[r][c]="none";
+    aiEffectState[r][c]=null;
   }
   aiRandomFill();
   renderReserve();
@@ -699,7 +699,6 @@ function finishPrepare(){
   startAttack();
 }
 function aiRandomFill(){
-  for(let r=0;r<BOARD_SIZE;r++) for(let c=0;c<BOARD_SIZE;c++) if(!ai[r][c]) ai[r][c]=null;
   const pool=[...FACTIONS[aiFaction]];
   while(pool.length){
     const name=pool.shift();
@@ -726,6 +725,7 @@ function startAttack(){
   lastPreview=null;
   clearEnemyMarks();
   clearMyMarks();
+  clearAiEffects(); // 이전 턴 이펙트는 제거
   renderBoards();
   log(`공격 단계 시작. 턴 ${turn}. 한 턴에 한 기물만 공격.`);
 }
@@ -765,21 +765,11 @@ function patternOffsets(k){
   }
 }
 
-/* 플레이어 공격 이펙트 출력 */
-function spawnHitEffect(el, attackerName){
-  const src = getEffectImage(attackerName);
-  const img = document.createElement('img');
-  img.src = src;
-  img.alt = attackerName + " 공격";
-  img.className = 'hit-effect';
-  el.appendChild(img);
-  setTimeout(()=>{ img.remove(); }, 500);
-}
-
 function applyAttack(boardEl, boardData, attackerName, target){
   const pattern=PATTERNS[attackerName]||"plus1";
   const ofs=patternOffsets(pattern);
   const isPlayerAttackOnAI = (boardEl===elBoardAI && boardData===ai);
+  const factionEffect = isPlayerAttackOnAI ? getFactionEffectImage(attackerName) : null;
   let hits=0,kills=0;
 
   ofs.forEach(([dr,dc])=>{
@@ -789,7 +779,6 @@ function applyAttack(boardEl, boardData, attackerName, target){
 
     const hadUnit = !!boardData[rr][cc];
 
-    // 시각적 hit 클래스는 두 보드 모두 사용
     el.classList.add('hit');
 
     if(boardData[rr][cc]){
@@ -803,25 +792,23 @@ function applyAttack(boardEl, boardData, attackerName, target){
           el.title="";
         }
         if(isPlayerAttackOnAI && hadUnit){
-          aiCellState[rr][cc]="kill"; // 영구 kill 표시
-          spawnHitEffect(el, attackerName);
-          // X 표시와 강한 붉은색은 renderBoards에서 재적용
+          aiCellState[rr][cc]="kill";   // 영구 kill 표시
+          if(factionEffect) aiEffectState[rr][cc]=factionEffect;
         }
       }else{
         if(boardEl===elBoardMe){
           renderCell(el, boardData[rr][cc], true, (turn>1 && boardData[rr][cc].lastUsedTurn===turn-1));
         }
         if(isPlayerAttackOnAI && hadUnit){
-          // 아직 살아있지만 적중
-          aiCellState[rr][cc]="hit";
-          spawnHitEffect(el, attackerName);
+          aiCellState[rr][cc]="hit";    // 영구 hit 표시
+          if(factionEffect) aiEffectState[rr][cc]=factionEffect;
         }
       }
     }
     hits++;
   });
 
-  // AI 보드의 영구 표시를 위해 재렌더
+  // 플레이어가 공격한 경우, 새 상태를 반영해서 전체 렌더
   if(isPlayerAttackOnAI){
     renderBoards();
   }
@@ -846,6 +833,7 @@ function beginBattle(){
   if(!hasKing(ai)){
     log("승리: 상대 왕이 사망했습니다.");
     setPhase("종료");
+    clearAiEffects();
     showResultPopup();
     return;
   }
@@ -875,15 +863,20 @@ async function enemyCounterAndEnd(){
   if(!hasKing(me)){
     log("패배: 아군 왕이 사망했습니다.");
     setPhase("종료");
+    clearAiEffects();
     showResultPopup();
     return;
   }
   // 전멸 체크
   if(countUnits(ai)===0 || countUnits(me)===0){
     setPhase("종료");
+    clearAiEffects();
     showResultPopup();
     return;
   }
+
+  // 상대 턴 처리 단계가 끝났으므로 공격 이펙트 제거
+  clearAiEffects();
   endTurn();
 }
 function countUnits(board){
@@ -1014,4 +1007,3 @@ renderReserve();
 </script>
 </body>
 </html>
-
