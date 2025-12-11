@@ -5,53 +5,290 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Trick Mate 프로토타입</title>
 <style>
-:root{--bg:#0f1115;--panel:#171a21;--panel2:#1f2430;--line:#2b3242;--text:#e6e9ef;--muted:#9aa3b2;--accent:#7cd1ff;--danger:#ff6b6b;--ok:#78e08f}
-*{box-sizing:border-box;font-family:system-ui,Segoe UI,Roboto,Apple SD Gothic Neo,Noto Sans KR,sans-serif}
-body{margin:0;background:var(--bg);color:var(--text)}
-.wrap{max-width:1200px;margin:20px auto;padding:12px}
-.topbar{display:flex;gap:8px;align-items:center;background:var(--panel);border:1px solid var(--line);padding:10px;border-radius:10px;position:sticky;top:8px;z-index:2}
-.btn{background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:8px 12px;border-radius:10px;cursor:pointer;user-select:none}
-.btn[disabled]{opacity:.5;cursor:not-allowed}
-.btn-danger{border-color:#5a2931;background:#2a0f13;color:#ffb4b4}
-.pill{padding:6px 10px;border-radius:999px;background:#101521;border:1px solid var(--line);font-weight:600}
-.boards{display:grid;grid-template-columns:1fr 320px 1fr;gap:12px;margin-top:12px}
-.board{display:grid;grid-template-columns:repeat(5,1fr);aspect-ratio:1;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.cell{border:1px solid #232838;display:flex;align-items:center;justify-content:center;font-weight:700;position:relative;font-size:12px;padding:2px;text-align:center}
-.cell:hover{outline:2px solid rgba(124,209,255,.25);outline-offset:-2px;cursor:pointer}
-.cell.preview::after{content:"";position:absolute;inset:0;background:rgba(124,209,255,.18)}
-.cell.hit{background:rgba(255,107,107,.22)}
-.cell.kill{background:rgba(255,107,107,.35)}
-.zone{display:flex;flex-direction:column;gap:12px}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
-.reserve{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-.chip{padding:8px;border-radius:10px;border:1px solid var(--line);text-align:center;background:var(--panel2);cursor:pointer;user-select:none}
-.chip.sel{outline:2px solid var(--accent)}
-.log{height:120px;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:12px;font-size:14px}
+:root{
+  /* 배경/패널 기본 톤 */
+  --bg:#bdf4b8;          /* 전체 배경 연녹색 */
+  --panel:#fffdf5;       /* 메인 카드(패널) */
+  --panel2:#ffecc2;      /* 버튼/보조 패널 */
+  --line:#e2e8d8;        /* 연한 라인 */
+  --text:#334155;        /* 본문 텍스트 */
+  --muted:#94a3b8;
+  --accent:#22c55e;      /* 초록 포인트 */
+  --danger:#fb7185;
+  --ok:#4ade80;          /* HP 바 색 */
+}
+
+*{
+  box-sizing:border-box;
+  font-family:system-ui,Segoe UI,Roboto,Apple SD Gothic Neo,Noto Sans KR,sans-serif
+}
+
+body{
+  margin:0;
+  background:radial-gradient(circle at top,#d7fdd2 0,#bdf4b8 40%,#a7e6ab 100%);
+  color:var(--text);
+}
+
+/* 메인 카드 래퍼 */
+.wrap{
+  max-width:1160px;
+  margin:28px auto;
+  padding:24px 24px 20px;
+  background:var(--panel);
+  border-radius:26px;
+  box-shadow:
+    0 18px 35px rgba(0,0,0,.12),
+    0 0 0 3px rgba(255,255,255,.6);
+}
+
+/* 상단 바 */
+.topbar{
+  display:flex;
+  gap:10px;
+  align-items:center;
+  background:transparent;
+  border-radius:18px;
+  padding:6px 4px 10px;
+}
+
+/* 버튼 */
+.btn{
+  background:var(--panel2);
+  border:1px solid #facc6b;
+  color:#78350f;
+  padding:8px 14px;
+  border-radius:18px;
+  cursor:pointer;
+  user-select:none;
+  font-weight:600;
+  box-shadow:0 3px 0 #fbbf24;
+  transition:transform .08s ease, box-shadow .08s ease, filter .1s ease;
+}
+.btn:hover{
+  filter:brightness(1.03);
+}
+.btn:active{
+  transform:translateY(2px);
+  box-shadow:0 1px 0 #fbbf24;
+}
+.btn[disabled]{
+  opacity:.6;
+  cursor:not-allowed;
+  box-shadow:none;
+}
+.btn-danger{
+  border-color:#fb7185;
+  background:#ffe4e6;
+  color:#b91c1c;
+  box-shadow:0 3px 0 #fb7185;
+}
+
+/* 알약형 태그 */
+.pill{
+  padding:6px 10px;
+  border-radius:999px;
+  background:#ecfdf5;
+  border:1px solid #bbf7d0;
+  font-weight:600;
+  font-size:12px;
+  color:#166534;
+}
+
+/* 보드 레이아웃 */
+.boards{
+  display:grid;
+  grid-template-columns:1fr 300px 1fr;
+  gap:16px;
+  margin-top:18px;
+}
+
+/* 보드 자체 */
+.board{
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+  aspect-ratio:1;
+  background:#e6ffd4;
+  border-radius:22px;
+  padding:10px;
+  border:2px solid #22c55e;
+  box-shadow:inset 0 0 0 4px rgba(34,197,94,.16);
+}
+
+/* 보드 셀 */
+.cell{
+  border:1px solid #c7f0b4;     /* 연한 격자 */
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:700;
+  position:relative;
+  font-size:12px;
+  padding:2px;
+  text-align:center;
+  background:rgba(255,255,255,.55);
+  border-radius:6px;
+}
+.cell:hover{
+  outline:2px solid rgba(34,197,94,.28);
+  outline-offset:-2px;
+  cursor:pointer;
+}
+.cell.preview::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:6px;
+  background:rgba(56,189,248,.22);
+}
+.cell.hit{
+  background:rgba(248,113,113,.25);
+}
+.cell.kill{
+  background:rgba(248,113,113,.35);
+}
+
+/* 중앙 패널 영역 */
+.zone{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+.panel{
+  background:#fefcf5;
+  border:1px solid var(--line);
+  border-radius:20px;
+  padding:12px 14px;
+  box-shadow:0 4px 10px rgba(148,163,184,.18);
+}
+
+/* 리저브 영역 */
+.reserve{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:8px;
+}
+.chip{
+  padding:8px 10px;
+  border-radius:16px;
+  border:1px solid #e2e8f0;
+  text-align:center;
+  background:#f9fafb;
+  cursor:pointer;
+  user-select:none;
+  font-size:13px;
+  color:#0f172a;
+  box-shadow:0 2px 0 rgba(148,163,184,.4);
+}
+.chip.sel{
+  outline:2px solid #22c55e;
+}
+
+/* 로그 */
+.log{
+  height:120px;
+  overflow:auto;
+  background:#f8fafc;
+  border:1px solid #dbeafe;
+  border-radius:16px;
+  padding:10px 12px;
+  margin-top:18px;
+  font-size:13px;
+  color:#0f172a;
+}
+
+/* 기타 레이아웃 */
 .row{display:flex;gap:12px;align-items:center}
 .center{display:flex;align-items:center;justify-content:center}
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:5}
-.overlay .start{background:#0b1320;border:1px solid #1c2a40;border-radius:18px;padding:28px 32px;box-shadow:0 10px 30px rgba(0,0,0,.4);text-align:center;min-width:260px}
-.overlay .start h1{margin:0 0 8px 0}
-.badge{display:inline-block;padding:4px 8px;border:1px solid var(--line);border-radius:8px;background:#141925;margin-left:6px}
-.status{min-width:120px;text-align:center}
+
+/* 오버레이 */
+.overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(15,23,42,.22);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:5;
+}
+.overlay .start{
+  background:#fffef7;
+  border:1px solid #e2e8f0;
+  border-radius:24px;
+  padding:26px 30px 22px;
+  box-shadow:0 18px 40px rgba(15,23,42,.3);
+  text-align:center;
+  min-width:260px;
+}
+.overlay .start h1{
+  margin:0 0 8px 0;
+  font-size:20px;
+  color:#111827;
+}
+
+/* 배지/상태 */
+.badge{
+  display:inline-block;
+  padding:4px 8px;
+  border:1px solid #bbf7d0;
+  border-radius:999px;
+  background:#ecfdf5;
+  margin-left:6px;
+  font-size:12px;
+  color:#166534;
+}
+.status{
+  min-width:120px;
+  text-align:center;
+  background:#eff6ff;
+  border-color:#bfdbfe;
+  color:#1d4ed8;
+}
 small{color:var(--muted)}
-.spinner{width:36px;height:36px;border:3px solid rgba(124,209,255,.2);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 8px}
+
+/* 스피너 */
+.spinner{
+  width:36px;
+  height:36px;
+  border:3px solid rgba(125,211,252,.3);
+  border-top-color:#22c55e;
+  border-radius:50%;
+  animation:spin 1s linear infinite;
+  margin:0 auto 10px;
+}
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* 유닛 렌더 */
-.unit{display:flex;flex-direction:column;align-items:center;gap:4px;line-height:1}
+.unit{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:4px;
+  line-height:1;
+}
 .unit-img{
-  width:90%;
-  max-height:56px;
+  width:88%;
+  max-height:54px;
   object-fit:contain;
-  image-rendering:auto;
   pointer-events:none;
+  image-rendering:auto;
 }
 .unit-name{font-size:11px}
-.unit-name.cd{color:var(--muted)} /* 직전 턴 사용으로 이번 턴 사용 불가 */
-.hpbar{display:flex;gap:2px}
-.hpseg{width:8px;height:4px;background:#233b2b;border-radius:2px;border:1px solid #2d4a36}
-.hpseg.on{background:var(--ok);border-color:#3a7a52}
+.unit-name.cd{color:var(--muted)} /* 직전 턴 사용으로 이번 턴 사용 불가 표시 */
+.hpbar{
+  display:flex;
+  gap:2px;
+}
+.hpseg{
+  width:8px;
+  height:4px;
+  background:#bbf7d0;
+  border-radius:999px;
+  border:1px solid #86efac;
+}
+.hpseg.on{
+  background:var(--ok);
+  border-color:#22c55e;
+}
 </style>
 </head>
 <body>
@@ -98,7 +335,7 @@ small{color:var(--muted)}
 
   <div class="boards">
     <div>
-      <div class="center" style="margin-bottom:6px;">플레이어 보드</div>
+      <div class="center" style="margin-bottom:6px;font-weight:600;">플레이어 보드</div>
       <div class="board" id="boardMe"></div>
     </div>
 
@@ -119,7 +356,7 @@ small{color:var(--muted)}
     </div>
 
     <div>
-      <div class="center" style="margin-bottom:6px;">적 보드</div>
+      <div class="center" style="margin-bottom:6px;font-weight:600;">적 보드</div>
       <div class="board" id="boardAI"></div>
     </div>
   </div>
@@ -148,28 +385,26 @@ const HP_TABLE={
   "에르핀":3,"네르":2,"죠안":2,"에슈르":2,"마요(멋짐)":2,"마리":1
 };
 
-/* ===== 유닛 이미지 경로 매핑 =====
-   실제 PNG 파일 경로에 맞게 수정해서 사용하세요.
-   예: /img/diana.png 를 배포 리포지토리에 올려두기 */
+/* ===== 유닛 이미지 경로 매핑 (실제 PNG 경로에 맞게 수정) ===== */
 const UNIT_IMAGES = {
-  "디아나":"img/디아나.png",
-  "티그":"img/티그.png",
-  "루포":"img/루포.png",
-  "버터":"img/버터.png",
-  "코미":"img/코미.png",
-  "베니":"img/베니.png",
-  "에르핀":"img/에르핀.png",
-  "네르":"img/네르.png",
-  "죠안":"img/죠안.png",
-  "에슈르":"img/에슈르.png",
-  "마요(멋짐)":"img/마요(멋짐).png",
-  "마리":"img/마리.png",
-  "벨리타":"img/벨리타.png",
-  "프리클":"img/프리클.png",
-  "셰럼":"img/셰럼.png",
-  "마카샤":"img/마카샤.png",
-  "포셔":"img/포셔.png",
-  "레비":"img/레비.png"
+  "디아나":"img/diana.png",
+  "티그":"img/tig.png",
+  "루포":"img/rupo.png",
+  "버터":"img/butter.png",
+  "코미":"img/komi.png",
+  "베니":"img/benny.png",
+  "에르핀":"img/erfin.png",
+  "네르":"img/ner.png",
+  "죠안":"img/joan.png",
+  "에슈르":"img/eshur.png",
+  "마요(멋짐)":"img/mayo_cool.png",
+  "마리":"img/marie.png",
+  "벨리타":"img/velita.png",
+  "프리클":"img/prickle.png",
+  "셰럼":"img/sherm.png",
+  "마카샤":"img/makasha.png",
+  "포셔":"img/posher.png",
+  "레비":"img/levi.png"
 };
 function getUnitImage(name){
   return UNIT_IMAGES[name] || "img/default.png";
@@ -177,9 +412,9 @@ function getUnitImage(name){
 
 /* ===== 점수 규칙 ===== */
 const SCORE_TABLE = {
-  "디아나":3, "에르핀":3, "벨리타":3,      // 왕
-  "티그":2, "네르":2, "프리클":2, "루포":2, "마카샤":2, "죠안":2, "셰럼":2, "에슈르":2, "포셔":2, "마요(멋짐)":2, // 보좌관
-  "버터":1, "코미":1, "베니":1, "마리":1, "레비":1 // 백성
+  "디아나":3, "에르핀":3, "벨리타":3,
+  "티그":2, "네르":2, "프리클":2, "루포":2, "마카샤":2, "죠안":2, "셰럼":2, "에슈르":2, "포셔":2, "마요(멋짐)":2,
+  "버터":1, "코미":1, "베니":1, "마리":1, "레비":1
 };
 function calcScore(board){
   let pieces=0, score=0;
@@ -259,7 +494,6 @@ function renderBoards(){
   if(lastPreview){ previewOn(lastPreview.r,lastPreview.c,true); }
 }
 
-/* 핵심 변경: 플레이어 보드에는 이미지 + HP바, 적 보드는 기존처럼 텍스트만(또는 비공개) */
 function renderCell(el, unit, showHp, cd){
   if(!unit){
     if(!el.classList.contains('kill')){
@@ -271,7 +505,6 @@ function renderCell(el, unit, showHp, cd){
   const {name,hp,max}=unit;
 
   if(showHp){
-    // 플레이어 보드: 캐릭터 이미지 + HP바
     const imgSrc = getUnitImage(name);
     el.innerHTML = `
       <div class="unit">
@@ -282,12 +515,12 @@ function renderCell(el, unit, showHp, cd){
       </div>
     `;
   }else{
-    // 적 보드 혹은 텍스트만 필요할 때
     el.innerHTML = name;
   }
   el.title = `${name} HP ${hp}/${max}`;
 }
 
+/* 상태/타이머 */
 function setPhase(p, seconds=0){
   phase=p;
   document.getElementById('phase').textContent=p;
@@ -313,7 +546,7 @@ function clearMyMarks(){[...elBoardMe.children].forEach(el=>el.classList.remove(
 /* ===== 유닛 ===== */
 function createUnit(name){
   const max=HP_TABLE[name]||1;
-  return {name, hp:max, max, lastUsedTurn:-1}; // 핵심: -1로 초기화
+  return {name, hp:max, max, lastUsedTurn:-1};
 }
 
 /* ===== 단계 전환 타이머 ===== */
@@ -339,7 +572,10 @@ function assignFactions(){
 function startPrepare(){
   for(let r=0;r<BOARD_SIZE;r++) for(let c=0;c<BOARD_SIZE;c++) me[r][c]=null;
   reserve=[...FACTIONS[myFaction]].sort((a,b)=>a.localeCompare(b));
-  selectedReserve=null; pickUp=null; attackChoice=null; lastPreview=null;
+  selectedReserve=null;
+  pickUp=null;
+  attackChoice=null;
+  lastPreview=null;
   aiRandomFill();
   renderReserve();
   renderBoards();
@@ -402,8 +638,10 @@ function collectAiUnits(){
 function startAttack(){
   hasAttacked=false;
   setPhase("공격", ATTACK_TIME);
-  attackChoice=null; lastPreview=null;
-  clearEnemyMarks(); clearMyMarks();
+  attackChoice=null;
+  lastPreview=null;
+  clearEnemyMarks();
+  clearMyMarks();
   renderBoards();
   log(`공격 단계 시작. 턴 ${turn}. 한 턴에 한 기물만 공격.`);
 }
@@ -432,6 +670,16 @@ function autoAttackIfNone(){
 }
 
 /* ===== 전투 처리 ===== */
+function patternOffsets(k){
+  switch(k){
+    case "plus1": return [[1,0],[-1,0],[0,1],[0,-1]];
+    case "diag1": return [[1,1],[1,-1],[-1,1],[-1,-1]];
+    case "cross2": return [[1,0],[-1,0],[0,1],[0,-1],[2,0],[-2,0],[0,2],[0,-2]];
+    case "square1": return [[0,0],[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+    case "line2": return [[1,0],[2,0],[-1,0],[-2,0],[0,1],[0,2],[0,-1],[0,-2]];
+    default: return [[0,0]];
+  }
+}
 function applyAttack(boardEl, boardData, attackerName, target){
   const pattern=PATTERNS[attackerName]||"plus1";
   const ofs=patternOffsets(pattern);
@@ -608,18 +856,6 @@ function previewOn(r,c,keep=false){
   if(!keep) log(`미리보기: (${r+1},${c+1}), 패턴[${pattern}]`);
 }
 
-/* ===== 패턴 ===== */
-function patternOffsets(k){
-  switch(k){
-    case "plus1": return [[1,0],[-1,0],[0,1],[0,-1]];
-    case "diag1": return [[1,1],[1,-1],[-1,1],[-1,-1]];
-    case "cross2": return [[1,0],[-1,0],[0,1],[0,-1],[2,0],[-2,0],[0,2],[0,-2]];
-    case "square1": return [[0,0],[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
-    case "line2": return [[1,0],[2,0],[-1,0],[-2,0],[0,1],[0,2],[0,-1],[0,-2]];
-    default: return [[0,0]];
-  }
-}
-
 /* ===== 결과 ===== */
 function showResultPopup(){
   const myRes = calcScore(me);
@@ -631,7 +867,7 @@ function showResultPopup(){
   const html = `
     <p>플레이어 남은 기물: <b>${myRes.pieces}</b>개 (${myRes.score}점)</p>
     <p>상대 남은 기물: <b>${aiRes.pieces}</b>개 (${aiRes.score}점)</p>
-    <hr style="border:none;border-top:1px solid #2b3242;margin:8px 0;">
+    <hr style="border:none;border-top:1px solid #e2e8d0;margin:8px 0;">
     <p><b>결과: ${winner}</b></p>
   `;
   document.getElementById('resultContent').innerHTML = html;
