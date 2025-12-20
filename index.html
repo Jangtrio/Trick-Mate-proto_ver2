@@ -327,6 +327,49 @@ small{color:var(--muted)}
 }
 
 /* =========================
+   NEW: 중앙 안내 패널 UX 개선
+   ========================= */
+.guide-title{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+}
+.guide-title b{
+  font-size:14px;
+  color:#0f172a;
+}
+.guide-tag{
+  font-size:11px;
+  padding:4px 8px;
+  border-radius:999px;
+  border:1px solid #bbf7d0;
+  background:#ecfdf5;
+  color:#166534;
+  white-space:nowrap;
+}
+.guide-body{
+  margin-top:8px;
+  font-size:13px;
+  line-height:1.55;
+  color:#0f172a;
+}
+.guide-body ul{
+  margin:8px 0 0 18px;
+  padding:0;
+}
+.guide-body li{
+  margin:6px 0;
+}
+.guide-dim{
+  color:#334155;
+}
+.guide-em{
+  font-weight:700;
+  color:#166534;
+}
+
+/* =========================
    Mobile Landscape Optimization (추가)
    - PC는 영향 없음: pointer: coarse(터치) + landscape + max-width 조건
    ========================= */
@@ -474,11 +517,16 @@ small{color:var(--muted)}
         </div>
         <div class="reserve" id="reserve"></div>
       </div>
-      <div class="panel">
-        <b>공격 안내</b>
-        <div style="margin-top:6px">
-          <small>1턴은 전체 사용 가능. 2턴부터 직전 턴 사용 기물은 회색 표시되고 사용 불가. 공격이 적중하면 상대 보드가 붉게 표시됨.</small>
+
+      <!-- =========================
+           NEW: 준비/공격 단계별 안내 패널
+           ========================= -->
+      <div class="panel" id="guidePanel">
+        <div class="guide-title">
+          <b id="guideTitle">안내</b>
+          <span class="guide-tag" id="guideTag">대기</span>
         </div>
+        <div class="guide-body" id="guideBody"></div>
       </div>
     </div>
 
@@ -609,6 +657,11 @@ const elReserve=document.getElementById('reserve');
 const elAiOverlay=document.getElementById('aiOverlay');
 const elNextOverlay=document.getElementById('nextOverlay');
 
+/* NEW: 안내 패널 DOM */
+const elGuideTitle = document.getElementById('guideTitle');
+const elGuideBody  = document.getElementById('guideBody');
+const elGuideTag   = document.getElementById('guideTag');
+
 for(let i=0;i<BOARD_SIZE*BOARD_SIZE;i++){
   const d=document.createElement('div');
   d.className='cell';
@@ -630,6 +683,57 @@ function log(msg){
 }
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
 const nextFrame=()=>new Promise(r=>requestAnimationFrame(()=>r()));
+
+/* =========================
+   NEW: 단계별 안내 패널 업데이트
+   ========================= */
+function updateGuidePanel(){
+  // 준비 단계 문구
+  const prepHTML = `
+    <div class="guide-dim">
+      <span class="guide-em">기물을 보드에 배치해보세요!</span><br>
+      기물 카테고리에 있는 기물을 클릭한 뒤, 플레이어 보드를 클릭하면 기물이 배치됩니다!
+    </div>
+  `;
+
+  // 공격 단계 문구
+  const attackHTML = `
+    <div class="guide-dim"><span class="guide-em">[공격 방법!]</span></div>
+    <ul>
+      <li>기물을 클릭합니다! 그리고 상대 보드 칸을 클릭하면 공격이 진행됩니다!</li>
+      <li>이전 턴에 사용한 기물은 1턴이 지나기까지 다시 사용할 수 없습니다 ㅠㅠ</li>
+      <li>공격이 적중하면 상대 보드가 붉게 표시됩니다!</li>
+      <li>상대 기물을 격파하면 보드 위에 X표시가 됩니다!</li>
+      <li>공격을 못해도 걱정하지마세요! 자동으로 공격이 진행됩니다!</li>
+      <li>상대 왕을 잡아서 게임에서 승리하세요!</li>
+    </ul>
+  `;
+
+  if(phase === "준비"){
+    elGuideTitle.textContent = "배치 안내";
+    elGuideTag.textContent = "준비 단계";
+    elGuideBody.innerHTML = prepHTML;
+    return;
+  }
+
+  // 준비가 끝나면(공격/전투/상대턴/다음턴 등) 공격 안내를 기본으로 유지
+  if(["공격","전투","상대턴"].includes(phase)){
+    elGuideTitle.textContent = "공격 안내";
+    elGuideTag.textContent = (phase === "공격") ? "공격 단계" : "진행 중";
+    elGuideBody.innerHTML = attackHTML;
+    return;
+  }
+
+  // 기타 단계(대기/진영배정/종료)에서는 상황 안내
+  elGuideTitle.textContent = "안내";
+  elGuideTag.textContent = phase;
+  elGuideBody.innerHTML = `
+    <div class="guide-dim">
+      현재 단계: <span class="guide-em">${phase}</span><br>
+      게임을 시작하면 준비 단계 안내가 표시됩니다.
+    </div>
+  `;
+}
 
 /* ===== 렌더 ===== */
 function renderBoards(){
@@ -660,7 +764,7 @@ function renderBoards(){
 
 function renderCell(el, unit, showHp, cd){
   if(!unit){
-    if(!el.classList.contains('kill')){ // kill 칸은 X 표시 유지
+    if(!el.classList.contains('kill')){
       el.innerHTML="";
       el.title="";
     }
@@ -688,6 +792,10 @@ function renderCell(el, unit, showHp, cd){
 function setPhase(p, seconds=0){
   phase=p;
   document.getElementById('phase').textContent=p;
+
+  // NEW: 단계 변경될 때 안내 패널도 동기화
+  updateGuidePanel();
+
   clearInterval(timerId);
   timeLeft=seconds;
   document.getElementById('timer').textContent=fmtTime(timeLeft);
@@ -705,11 +813,9 @@ function setPhase(p, seconds=0){
 
 /* ===== 흐릿표시 초기화 ===== */
 function clearEnemyMarks(){
-  // 이제 preview만 제거, hit/kill은 영구 표시
   [...elBoardAI.children].forEach(el=>el.classList.remove('preview'));
 }
 function clearMyMarks(){
-  // 우리 보드의 hit/kill은 매 턴 리셋
   [...elBoardMe.children].forEach(el=>el.classList.remove('preview','hit','kill'));
 }
 
@@ -746,7 +852,6 @@ function startPrepare(){
   pickUp=null;
   attackChoice=null;
   lastPreview=null;
-  // ai 보드 상태/히트 표시 초기화
   for(let r=0;r<BOARD_SIZE;r++) for(let c=0;c<BOARD_SIZE;c++){
     ai[r][c]=null;
     aiCellState[r][c]="none";
@@ -880,7 +985,6 @@ function applyAttack(boardEl, boardData, attackerName, target){
 
     const hadUnit = !!boardData[rr][cc];
 
-    // 시각적 hit 클래스는 두 보드 모두 사용
     el.classList.add('hit');
 
     if(boardData[rr][cc]){
@@ -894,16 +998,14 @@ function applyAttack(boardEl, boardData, attackerName, target){
           el.title="";
         }
         if(isPlayerAttackOnAI && hadUnit){
-          aiCellState[rr][cc]="kill"; // 영구 kill 표시
+          aiCellState[rr][cc]="kill";
           spawnHitEffect(el, attackerName);
-          // X 표시와 강한 붉은색은 renderBoards에서 재적용
         }
       }else{
         if(boardEl===elBoardMe){
           renderCell(el, boardData[rr][cc], true, (turn>1 && boardData[rr][cc].lastUsedTurn===turn-1));
         }
         if(isPlayerAttackOnAI && hadUnit){
-          // 아직 살아있지만 적중
           aiCellState[rr][cc]="hit";
           spawnHitEffect(el, attackerName);
         }
@@ -912,7 +1014,6 @@ function applyAttack(boardEl, boardData, attackerName, target){
     hits++;
   });
 
-  // AI 보드의 영구 표시를 위해 재렌더
   if(isPlayerAttackOnAI){
     renderBoards();
   }
@@ -920,7 +1021,6 @@ function applyAttack(boardEl, boardData, attackerName, target){
 }
 function beginBattle(){
   setPhase("전투");
-  // 내 공격
   if(attackChoice){
     const {unitAt,target}=attackChoice;
     const myUnit=me[unitAt.r][unitAt.c];
@@ -933,14 +1033,12 @@ function beginBattle(){
   }else{
     log("공격 없음.");
   }
-  // 상대 왕 즉사 체크
   if(!hasKing(ai)){
     log("승리: 상대 왕이 사망했습니다.");
     setPhase("종료");
     showResultPopup();
     return;
   }
-  // AI 반격
   enemyCounterAndEnd();
 }
 
@@ -962,14 +1060,12 @@ async function enemyCounterAndEnd(){
   }else{
     log("상대는 이번 턴에 사용할 기물이 없음.");
   }
-  // 아군 왕 즉사 체크
   if(!hasKing(me)){
     log("패배: 아군 왕이 사망했습니다.");
     setPhase("종료");
     showResultPopup();
     return;
   }
-  // 전멸 체크
   if(countUnits(ai)===0 || countUnits(me)===0){
     setPhase("종료");
     showResultPopup();
@@ -1119,6 +1215,7 @@ updateRotateOverlay();
 /* ===== 초기 렌더 ===== */
 renderBoards();
 renderReserve();
+updateGuidePanel(); // NEW: 최초 안내 렌더
 </script>
 </body>
 </html>
